@@ -80,6 +80,89 @@ For a more detailed table of contents, you can use GitHub's native menu located 
 * **LS Export Supported**: Indicates whether Label Studio supports Export from Label Studio to YOLO format (the **Export** button on the Data Manager and using the LS converter).
 * **Native**: Native means that only native Label Studio JSON format is supported.
 
+## Hybrid YOLO + Grounding DINO Mode
+
+The YOLO ML backend supports a hybrid mode that combines YOLO's speed and accuracy for known classes with Grounding DINO's flexibility for unknown or custom classes.
+
+### How it works
+
+1. **YOLO First**: The system first runs YOLO predictions for classes that have matching `predicted_values` in your Label Studio configuration
+2. **Grounding DINO Fallback**: For classes without YOLO mappings, Grounding DINO is used with text prompts based on your label names
+3. **Combined Results**: Both sets of predictions are merged into a single response
+
+### Enabling Hybrid Mode
+
+1. **Install Grounding DINO dependencies**:
+   ```bash
+   pip install git+https://github.com/IDEA-Research/GroundingDINO.git
+   pip install torch torchvision transformers addict yapf timm
+   ```
+
+2. **Set environment variables**:
+   ```bash
+   export USE_HYBRID_MODE=true
+   export GROUNDING_DINO_CONFIG=GroundingDINO_SwinT_OGC.py
+   export GROUNDING_DINO_WEIGHTS=groundingdino_swint_ogc.pth
+   export GROUNDING_DINO_BOX_THRESHOLD=0.3
+   export GROUNDING_DINO_TEXT_THRESHOLD=0.25
+   export GROUNDINGDINO_REPO_PATH=./GroundingDINO
+   ```
+
+3. **Configure your labels**:
+   ```xml
+   <View>
+     <Image name="image" value="$image"/>
+     <RectangleLabels name="label" toName="image" model_score_threshold="0.25">
+       <!-- YOLO classes with predicted_values mapping -->
+       <Label value="Car" background="blue" predicted_values="car,truck,vehicle"/>
+       <Label value="Person" background="green" predicted_values="person,human"/>
+       <!-- Grounding DINO classes (no predicted_values) -->
+       <Label value="Custom Object" background="red"/>
+       <Label value="Special Item" background="yellow"/>
+     </RectangleLabels>
+   </View>
+   ```
+
+### Grounding DINO Batch Processing
+
+Uses **comma-separated labels** for maximum efficiency:
+
+- **Process**: All unmapped labels in one prompt: `"boat, plane, ship, car"`
+- **Speed**: ✅ **Fast** - Single model call for all labels
+- **Labeling**: All detections get generic `"Detected Object"` label
+- **Format**: Same Label Studio format as YOLO predictions
+
+### Use Cases
+
+- **Known + Unknown Objects**: YOLO handles mapped labels, Grounding DINO finds everything else
+- **Dynamic Labels**: Add new labels instantly without model retraining
+- **Exploratory Work**: Quickly detect any objects of interest
+- **Production Workflows**: Reliable predictions with proper labeling
+
+### Performance Considerations
+
+- Hybrid mode loads both YOLO and Grounding DINO models
+- Grounding DINO uses batch processing for maximum speed
+- YOLO predictions are class-specific and accurate
+- Grounding DINO predictions use generic "Detected Object" labels
+- Single inference call per image for unmapped labels
+- **Note**: Hybrid mode uses CUDA development image (~8GB vs ~4GB runtime image)
+- **Build Time**: Grounding DINO compilation adds ~2-3 minutes to first build
+
+### Troubleshooting Hybrid Mode
+
+**CUDA Compilation Issues**:
+- The build may fail if CUDA development tools are missing
+- Solution: Ensure Docker has access to NVIDIA GPU and drivers
+- Alternative: Use CPU-only inference (set environment variable to disable CUDA in Grounding DINO)
+
+**Large Image Size**:
+- Development image is ~8GB vs ~4GB runtime image
+- Consider using separate containers if size is a concern
+
+**Build Time**:
+- First build takes longer due to CUDA compilation
+- Subsequent builds will be faster (using Docker cache)
 
 ## Before you begin 
 
@@ -87,17 +170,67 @@ Before you begin, you need to install the [Label Studio ML backend](https://gith
 
 This tutorial uses the [YOLO example](https://github.com/HumanSignal/label-studio-ml-backend/tree/master/label_studio_ml/examples/yolo).
 
-## Quick start
+## 🚀 Quick Start (Automated)
 
-1. Add `LABEL_STUDIO_URL` and `LABEL_STUDIO_API_KEY` to the `docker-compose.yml` file. 
-These variables should point to your Label Studio instance and its API key, respectively. 
-For more information about finding your Label Studio API key, [see our documentation](https://labelstud.io/guide/user_account#Access-token).
+The easiest way to deploy is using our automated setup script:
 
-2. Run docker compose
+### Option 1: Automated Interactive Setup
 
-    ```bash
-    docker-compose up --build
-    ```
+```bash
+# Clone the repository (if not already done)
+cd /path/to/your/workspace
+git clone https://github.com/HumanSignal/label-studio-ml-backend.git
+cd label-studio-ml-backend/label_studio_ml/examples/yolo
+
+# Run the automated setup
+./setup.sh
+```
+
+The script will:
+- ✅ Check Docker installation
+- ✅ Prompt for Label Studio URL and API key
+- ✅ Ask if you want hybrid mode
+- ✅ Download required models automatically
+- ✅ Build and start the service
+
+### Option 2: Manual Setup
+
+If you prefer manual configuration:
+
+1. **Create `.env` file** with your configuration:
+   ```bash
+   cat > .env << EOF
+   # ===================================================
+   # YOLO ML Backend Configuration
+   # ===================================================
+
+   # REQUIRED: Label Studio Connection
+   LABEL_STUDIO_HOST=http://your-label-studio-url:8080
+   LABEL_STUDIO_API_KEY=your-api-key-here
+
+   # OPTIONAL: Hybrid Mode
+   USE_HYBRID_MODE=false
+
+   # OPTIONAL: Performance
+   LOG_LEVEL=INFO
+   WORKERS=2
+   THREADS=4
+   PORT=9090
+   EOF
+   ```
+
+2. **Edit the values** in `.env` with your actual Label Studio URL and API key
+
+3. **Run with Docker Compose**:
+   ```bash
+   docker-compose up --build -d
+   ```
+
+### Option 3: Quick Setup (for existing .env)
+
+```bash
+./setup.sh --quick
+```
 
 3. Open Label Studio and create a new project with the following labeling config:
 
@@ -1034,6 +1167,87 @@ Use `LOG_LEVEL=DEBUG` to get detailed logs. Example:
 
 ```bash
 LOG_LEVEL=DEBUG python cli.py --ls-url http://localhost:8080 --ls-api-key YOUR_API_KEY --project 2 --tasks 1,2,3
+```
+
+## 🔍 Monitoring & Health Checks
+
+### Check Service Status
+```bash
+# Check if container is running
+docker-compose ps
+
+# View real-time logs
+docker-compose logs -f
+
+# Check health endpoint
+curl http://localhost:9090/health
+```
+
+### View Logs
+```bash
+# All logs
+docker-compose logs
+
+# Follow logs in real-time
+docker-compose logs -f yolo-ml-backend
+
+# Last 100 lines
+docker-compose logs --tail=100
+```
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**"Connection refused" when connecting to Label Studio**
+- Make sure Label Studio is accessible from Docker
+- Use `http://host.docker.internal:8080` for local installations
+- Check firewall settings
+
+**"Model not found" errors**
+- Models are downloaded automatically during build
+- Check if `models/` directory exists and has the required `.pt` files
+
+**High memory usage**
+- Reduce `WORKERS` and `THREADS` in `.env`
+- Use smaller YOLO models by setting custom `model_path`
+
+**Hybrid mode not working**
+- Ensure `USE_HYBRID_MODE=true` in `.env`
+- Check that Grounding DINO model was downloaded to `models/`
+
+### Reset Everything
+```bash
+# Stop and remove containers
+docker-compose down
+
+# Remove images and volumes (WARNING: deletes all data)
+docker-compose down -v --rmi all
+
+# Rebuild from scratch
+docker-compose up --build
+```
+
+## 📊 Performance Tuning
+
+### For Better Speed
+```bash
+# Use more workers (if you have CPU cores)
+WORKERS=4
+THREADS=8
+
+# Use smaller/faster models
+model_path=yolov8n.pt  # in labeling config
+```
+
+### For Lower Memory Usage
+```bash
+# Use fewer workers
+WORKERS=1
+THREADS=2
+
+# Disable hybrid mode
+USE_HYBRID_MODE=false
 ```
 
 ## For developers

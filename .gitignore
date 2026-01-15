@@ -132,3 +132,23 @@ dmypy.json
 .github/actions-hub
 
 .idea/
+
+# ML Model files
+*.pt
+*.pth
+*.onnx
+*.pb
+*.h5
+*.pkl
+*.pickle
+*.joblib
+*.model
+*.weights
+*.bin
+
+# Large data files
+*.tar.gz
+*.zip
+*.rar
+*.7z*.pth
+*.pt

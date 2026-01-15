@@ -2,52 +2,57 @@ version: "3.8"
 
 services:
   yolo:
-    container_name: yolo
-    image: humansignal/yolo:v0
+    container_name: yolo-ml-backend
+    image: yolo-ml-backend:latest
     build:
       context: .
       args:
-        TEST_ENV: ${TEST_ENV}
+        TEST_ENV: ${TEST_ENV:-false}
+        USE_HYBRID_MODE: ${USE_HYBRID_MODE:-false}
     environment:
-      # specify these parameters if you want to use basic auth for the model server
-      - BASIC_AUTH_USER=
-      - BASIC_AUTH_PASS=
-      # set the log level for the model server
-      - LOG_LEVEL=DEBUG
-      # any other parameters that you want to pass to the model server
-      - ANY=PARAMETER
-      # specify the number of workers and threads for the model server
-      - WORKERS=1
-      - THREADS=8
-      # specify the model directory (likely you don't need to change this)
-      - MODEL_DIR=/data/models
-      - PYTHONPATH=/app
-
-      # Specify the Label Studio URL and API key to access
-      # uploaded, local storage and cloud storage files.
-      # Do not use 'localhost' or '127.0.0.1' as it does not work within Docker containers.
-      # Use prefix 'http://' or 'https://' for the URL always.
-      # Determine the actual IP using 'ifconfig' (Linux/Mac) or 'ipconfig' (Windows).
-      # or you can try http://host.docker.internal:<label-studio-port> if you run LS on the same machine
+      # Core configuration - EDIT THESE VALUES
       - LABEL_STUDIO_HOST=${LABEL_STUDIO_HOST:-http://host.docker.internal:8080}
       - LABEL_STUDIO_API_KEY=${LABEL_STUDIO_API_KEY}
 
-      # YOLO parameters
+      # Optional authentication
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-}
 
-      # Allow to use custom `model_path` in labeling configurations
-      - ALLOW_CUSTOM_MODEL_PATH=true
-      # Show matplotlib debug plot for YOLO predictions
-      - DEBUG_PLOT=false
-      # Default score threshold, which is used to filter out low-confidence predictions,
-      # you can change it in the labeling configuration using `model_score_threshold` parameter in the control tags
-      - MODEL_SCORE_THRESHOLD=0.5
-      # Model root directory, where the YOLO model files are stored
+      # Logging and performance
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - WORKERS=${WORKERS:-2}
+      - THREADS=${THREADS:-4}
+
+      # YOLO configuration
+      - ALLOW_CUSTOM_MODEL_PATH=${ALLOW_CUSTOM_MODEL_PATH:-true}
+      - DEBUG_PLOT=${DEBUG_PLOT:-false}
+      - MODEL_SCORE_THRESHOLD=${MODEL_SCORE_THRESHOLD:-0.5}
       - MODEL_ROOT=/app/models
+
+      # Hybrid mode configuration
+      - USE_HYBRID_MODE=${USE_HYBRID_MODE:-false}
+      - GROUNDING_DINO_CONFIG=${GROUNDING_DINO_CONFIG:-GroundingDINO_SwinT_OGC.py}
+      - GROUNDING_DINO_WEIGHTS=${GROUNDING_DINO_WEIGHTS:-groundingdino_swint_ogc.pth}
+      - GROUNDING_DINO_BOX_THRESHOLD=${GROUNDING_DINO_BOX_THRESHOLD:-0.3}
+      - GROUNDING_DINO_TEXT_THRESHOLD=${GROUNDING_DINO_TEXT_THRESHOLD:-0.25}
+      - GROUNDINGDINO_REPO_PATH=${GROUNDINGDINO_REPO_PATH:-./GroundingDINO}
+
+      # System paths
+      - MODEL_DIR=/data/models
+      - PYTHONPATH=/app
+
     extra_hosts:
-      - "host.docker.internal:host-gateway"  # for macos and unix      
+      - "host.docker.internal:host-gateway"
     ports:
-      - "9090:9090"
+      - "${PORT:-9090}:9090"
     volumes:
-      - "./data/server:/data"
       - "./models:/app/models"
       - "./cache_dir:/app/cache_dir"
+      - "./data:/data"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped

@@ -31,6 +31,12 @@ def init_app(model_class, basic_auth_user=None, basic_auth_pass=None):
     return _server
 
 
+@_server.route('/health', methods=['GET'])
+def _health():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "service": "yolo-ml-backend"})
+
+
 @_server.route('/predict', methods=['POST'])
 @exception_handler
 def _predict():

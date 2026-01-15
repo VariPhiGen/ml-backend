@@ -129,8 +129,10 @@ Uses **comma-separated labels** for maximum efficiency:
 
 - **Process**: All unmapped labels in one prompt: `"boat, plane, ship, car"`
 - **Speed**: ✅ **Fast** - Single model call for all labels
-- **Labeling**: All detections get generic `"Detected Object"` label
+- **Labeling**: ✅ **Accurate** - Returns phrases for each detection, enabling precise label matching
 - **Format**: Same Label Studio format as YOLO predictions
+
+**Phrase-Based Labeling**: Grounding DINO returns the specific text that matched each detection (e.g., "boat", "plane"), allowing exact label assignment instead of generic labels.
 
 ### Use Cases
 

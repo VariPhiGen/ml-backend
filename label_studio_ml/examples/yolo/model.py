@@ -291,7 +291,8 @@ class YOLO(LabelStudioMLBase):
 
         try:
             # Run single Grounding DINO prediction for all labels at once
-            boxes, logits, _ = predict(
+            # Grounding DINO predict() returns: boxes, logits, phrases
+            boxes, logits, phrases = predict(
                 model=self.grounding_dino_model,
                 image=img,
                 caption=prompt,  # Comma-separated: "boat, plane, ship, car"
@@ -300,6 +301,8 @@ class YOLO(LabelStudioMLBase):
                 device=self.grounding_dino_device
             )
 
+            logger.debug(f"Grounding DINO found {len(boxes)} detections with phrases: {phrases}")
+
             if len(boxes) == 0:
                 logger.debug("No detections found for batch prompt")
                 return regions
@@ -307,10 +310,53 @@ class YOLO(LabelStudioMLBase):
             boxes_xyxy = box_ops.box_cxcywh_to_xyxy(boxes) * torch.Tensor([W, H, W, H])
             points = boxes_xyxy.cpu().numpy()
 
-            # Since Grounding DINO doesn't specify which class each detection belongs to
-            # when using comma-separated prompts, we use a generic label
-            generic_label = "detected_object"
-            output_label = rectangle_control.label_map.get(generic_label, "Detected Object") if rectangle_control.label_map else "Detected Object"
+            # Grounding DINO returns phrases for each detection!
+            # phrases is a list of strings, one for each detection
+            logger.info(f"✅ Grounding DINO returned {len(phrases)} phrases: {phrases}")
+
+            # Process each detection with its corresponding phrase
+            for point, logit, phrase in zip(points, logits, phrases):
+                score = float(logit.item())
+                if score < rectangle_control.model_score_threshold:
+                    continue
+
+                # Clean the phrase (remove extra spaces, punctuation)
+                clean_phrase = phrase.strip().lower().replace('.', '')
+                logger.debug(f"Processing phrase: '{phrase}' -> cleaned: '{clean_phrase}'")
+
+                # Try to match the phrase to our grounding labels
+                matched_label = None
+                for original_label in grounding_labels:
+                    # Check if the phrase contains the label or vice versa
+                    original_lower = original_label.lower()
+                    if (original_lower in clean_phrase or
+                        clean_phrase in original_lower or
+                        clean_phrase == original_lower):
+                        matched_label = original_label
+                        break
+
+                if matched_label:
+                    output_label = rectangle_control.label_map.get(matched_label, matched_label) if rectangle_control.label_map else matched_label
+                    logger.debug(f"✅ Phrase '{phrase}' matched to label '{matched_label}' -> '{output_label}'")
+                else:
+                    # Fallback to generic label if no match found
+                    output_label = rectangle_control.label_map.get("detected_object", "Detected Object") if rectangle_control.label_map else "Detected Object"
+                    logger.debug(f"⚠️ Phrase '{phrase}' not matched to any label, using generic '{output_label}'")
+
+                region = {
+                    "from_name": rectangle_control.from_name,
+                    "to_name": rectangle_control.to_name,
+                    "type": "rectanglelabels",
+                    "value": {
+                        "rectanglelabels": [output_label],
+                        "x": (point[0] / W) * 100,
+                        "y": (point[1] / H) * 100,
+                        "width": ((point[2] - point[0]) / W) * 100,
+                        "height": ((point[3] - point[1]) / H) * 100,
+                    },
+                    "score": score,
+                }
+                regions.append(region)
 
             # Convert all detections to Label Studio format with generic label
             for point, logit in zip(points, logits):

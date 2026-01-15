@@ -148,8 +148,8 @@ Uses **comma-separated labels** for maximum efficiency:
 - YOLO predictions are class-specific and accurate
 - Grounding DINO predictions use accurate phrase-matched labels
 - Single inference call per image for unmapped labels
-- **Runtime Installation**: Grounding DINO installs on first hybrid mode run
-- **CPU Mode**: Grounding DINO runs on CPU (works without GPU)
+- **Build-Time Installation**: Grounding DINO installs during Docker build when `USE_HYBRID_MODE=true`
+- **CUDA Support**: Uses CUDA development image for optimal performance
 
 ### Troubleshooting Hybrid Mode
 

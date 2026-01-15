@@ -29,58 +29,6 @@ try:
 except ImportError:
     GROUNDING_DINO_AVAILABLE = False
 
-    # Try to install Grounding DINO at runtime if hybrid mode is requested
-    def _install_grounding_dino():
-        """Install Grounding DINO at runtime using CPU-only build"""
-        try:
-            import subprocess
-            import sys
-            import os
-            logger.info("Installing Grounding DINO at runtime (CPU-only)...")
-
-            # Set environment to force CPU-only build
-            env = os.environ.copy()
-            env['GROUNDING_DINO_FORCE_CPU_ONLY'] = '1'
-            env['FORCE_CUDA'] = '0'
-
-            # Install CPU-only PyTorch first
-            logger.info("Installing CPU-only PyTorch...")
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "torch==2.0.1+cpu", "torchvision==0.15.2+cpu",
-                "--index-url", "https://download.pytorch.org/whl/cpu"
-            ], env=env)
-
-            # Install other dependencies
-            logger.info("Installing dependencies...")
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "transformers", "addict", "yapf", "timm", "supervision", "pycocotools"
-            ], env=env)
-
-            # Install Grounding DINO with CPU-only settings
-            logger.info("Installing Grounding DINO (CPU-only)...")
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "git+https://github.com/IDEA-Research/GroundingDINO.git",
-                "--no-build-isolation",
-                "--force-reinstall"
-            ], env=env)
-
-            # Try to import to verify installation
-            logger.info("Verifying Grounding DINO installation...")
-            import pathlib
-            import torch
-            from groundingdino.util.inference import load_model, load_image, predict
-            from groundingdino.util import box_ops
-
-            logger.info("✅ Grounding DINO installed successfully at runtime (CPU-only)")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Failed to install Grounding DINO at runtime: {e}")
-            logger.error(f"Error details: {str(e)}")
-            return False
-
 
 logger = logging.getLogger(__name__)
 if not os.getenv("LOG_LEVEL"):
@@ -116,26 +64,9 @@ class YOLO(LabelStudioMLBase):
         """Configure any parameters of your model here"""
         self.set("model_version", "yolo")
 
-        # Initialize Grounding DINO if available, or try runtime installation
+        # Initialize Grounding DINO if available
         if GROUNDING_DINO_AVAILABLE:
             self._init_grounding_dino()
-        elif os.getenv("USE_HYBRID_MODE", "false").lower() in ["1", "true"]:
-            # Try runtime installation for hybrid mode
-            logger.info("Grounding DINO not available, attempting runtime installation...")
-            if _install_grounding_dino():
-                # Re-import after installation
-                try:
-                    import pathlib
-                    import torch
-                    from groundingdino.util.inference import load_model, load_image, predict
-                    from groundingdino.util import box_ops
-                    self._init_grounding_dino()
-                except ImportError as e:
-                    logger.error(f"Failed to import Grounding DINO after installation: {e}")
-                    self.grounding_dino_model = None
-            else:
-                logger.warning("Grounding DINO runtime installation failed - hybrid mode will not work")
-                self.grounding_dino_model = None
         else:
             self.grounding_dino_model = None
 

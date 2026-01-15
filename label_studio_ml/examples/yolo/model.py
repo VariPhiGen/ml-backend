@@ -31,40 +31,54 @@ except ImportError:
 
     # Try to install Grounding DINO at runtime if hybrid mode is requested
     def _install_grounding_dino():
-        """Install Grounding DINO at runtime"""
+        """Install Grounding DINO at runtime using CPU-only build"""
         try:
             import subprocess
             import sys
-            logger.info("Installing Grounding DINO at runtime...")
+            import os
+            logger.info("Installing Grounding DINO at runtime (CPU-only)...")
 
-            # Install CPU-only PyTorch and dependencies
+            # Set environment to force CPU-only build
+            env = os.environ.copy()
+            env['GROUNDING_DINO_FORCE_CPU_ONLY'] = '1'
+            env['FORCE_CUDA'] = '0'
+
+            # Install CPU-only PyTorch first
+            logger.info("Installing CPU-only PyTorch...")
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install",
-                "torch==2.0.1", "torchvision==0.15.2", "--index-url", "https://download.pytorch.org/whl/cpu"
-            ])
+                "torch==2.0.1+cpu", "torchvision==0.15.2+cpu",
+                "--index-url", "https://download.pytorch.org/whl/cpu"
+            ], env=env)
 
             # Install other dependencies
+            logger.info("Installing dependencies...")
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install",
-                "transformers", "addict", "yapf", "timm"
-            ])
+                "transformers", "addict", "yapf", "timm", "supervision", "pycocotools"
+            ], env=env)
 
-            # Install Grounding DINO
+            # Install Grounding DINO with CPU-only settings
+            logger.info("Installing Grounding DINO (CPU-only)...")
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install",
-                "git+https://github.com/IDEA-Research/GroundingDINO.git", "--no-build-isolation"
-            ])
+                "git+https://github.com/IDEA-Research/GroundingDINO.git",
+                "--no-build-isolation",
+                "--force-reinstall"
+            ], env=env)
 
-            # Try to import again
+            # Try to import to verify installation
+            logger.info("Verifying Grounding DINO installation...")
             import pathlib
             import torch
             from groundingdino.util.inference import load_model, load_image, predict
             from groundingdino.util import box_ops
 
-            logger.info("✅ Grounding DINO installed successfully at runtime")
+            logger.info("✅ Grounding DINO installed successfully at runtime (CPU-only)")
             return True
         except Exception as e:
             logger.error(f"❌ Failed to install Grounding DINO at runtime: {e}")
+            logger.error(f"Error details: {str(e)}")
             return False
 
 

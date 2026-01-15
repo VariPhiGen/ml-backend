@@ -146,10 +146,10 @@ Uses **comma-separated labels** for maximum efficiency:
 - Hybrid mode loads both YOLO and Grounding DINO models
 - Grounding DINO uses batch processing for maximum speed
 - YOLO predictions are class-specific and accurate
-- Grounding DINO predictions use generic "Detected Object" labels
+- Grounding DINO predictions use accurate phrase-matched labels
 - Single inference call per image for unmapped labels
-- **Note**: Hybrid mode uses CUDA development image (~8GB vs ~4GB runtime image)
-- **Build Time**: Grounding DINO compilation adds ~2-3 minutes to first build
+- **Runtime Installation**: Grounding DINO installs on first hybrid mode run
+- **CPU Mode**: Grounding DINO runs on CPU (works without GPU)
 
 ### Troubleshooting Hybrid Mode
 

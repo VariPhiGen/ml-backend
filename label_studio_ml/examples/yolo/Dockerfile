@@ -31,13 +31,8 @@ RUN pip install --no-cache-dir -r requirements-base.txt
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Conditionally install Grounding DINO for hybrid mode
-RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
-        echo "Installing Grounding DINO for hybrid mode..." && \
-        export TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6+PTX;8.9;9.0" && \
-        pip install torch torchvision transformers addict yapf timm && \
-        pip install git+https://github.com/IDEA-Research/GroundingDINO.git --no-build-isolation; \
-    fi
+# Note: Grounding DINO will be installed at runtime if USE_HYBRID_MODE=true
+# This avoids build-time CUDA compilation issues
 
 # Install test requirements if needed
 COPY requirements-test.txt .

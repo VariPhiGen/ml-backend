@@ -127,7 +127,7 @@ download_models() {
 
     # Download Grounding DINO model if hybrid mode is enabled
     if [ "$USE_HYBRID" = "true" ]; then
-        print_warning "Hybrid mode enabled - this will increase build time due to CUDA compilation"
+        print_warning "Hybrid mode enabled - Grounding DINO will be installed at runtime (may take a few minutes on first run)"
         print_info "Downloading Grounding DINO model..."
 
         if [ ! -f "models/groundingdino_swint_ogc.pth" ]; then

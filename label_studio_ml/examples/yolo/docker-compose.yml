@@ -8,6 +8,7 @@ services:
       context: .
       args:
         TEST_ENV: ${TEST_ENV:-false}
+        USE_HYBRID_MODE: ${USE_HYBRID_MODE:-false}
     environment:
       # Core configuration
       LABEL_STUDIO_HOST: ${LABEL_STUDIO_HOST:-http://host.docker.internal:8080}
@@ -23,7 +24,7 @@ services:
       ALLOW_CUSTOM_MODEL_PATH: true
       DEBUG_PLOT: false
       MODEL_SCORE_THRESHOLD: 0.5
-      USE_HYBRID_MODE: ${USE_HYBRID_MODE:-false}
+      USE_HYBRID_MODE: ${USE_HYBRID_MODE:-true}
       OWL_VIT_BOX_THRESHOLD: 0.1
       OWL_VIT_TEXT_THRESHOLD: 0.0
 

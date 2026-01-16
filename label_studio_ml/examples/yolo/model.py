@@ -76,6 +76,7 @@ class YOLO(LabelStudioMLBase):
     def _init_owl_vit(self):
         """Initialize OWL-ViT model"""
         try:
+            import torch
             from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
             logger.info("Loading OWL-ViT model (this may take a moment on first run)...")
@@ -188,23 +189,38 @@ class YOLO(LabelStudioMLBase):
         predictions = []
         for task in tasks:
             regions = []
+            model_files_used = []
             for model in control_models:
                 path = model.get_path(task)
                 regions += model.predict_regions(path)
+                # Track which model file was used
+                model_file = getattr(model, 'model_path', 'unknown')
+                if model_file not in model_files_used:
+                    model_files_used.append(model_file)
 
             # calculate final score
             all_scores = [region["score"] for region in regions if "score" in region]
             avg_score = sum(all_scores) / max(len(all_scores), 1)
 
             # compose final prediction
+            model_file = model_files_used[0] if model_files_used else "unknown"
+            logger.info(f"Using model file(s): {model_files_used}")
             prediction = {
                 "result": regions,
                 "score": avg_score,
                 "model_version": self.model_version,
+                "model_file": model_file,
             }
+            if len(model_files_used) > 1:
+                prediction["model_files"] = model_files_used
+            logger.debug(f"Prediction keys: {list(prediction.keys())}")
+            logger.info(f"Prediction dict includes model_file: {'model_file' in prediction}, value: {prediction.get('model_file')}")
             predictions.append(prediction)
 
-        return ModelResponse(predictions=predictions)
+        logger.info(f"Returning ModelResponse with {len(predictions)} predictions")
+        response = ModelResponse(predictions=predictions)
+        logger.info(f"After ModelResponse creation, first prediction keys: {list(response.model_dump()['predictions'][0].keys()) if response.model_dump().get('predictions') else 'NO PREDICTIONS'}")
+        return response
 
     def _predict_hybrid(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> ModelResponse:
         """Hybrid prediction using YOLO for known classes and Grounding DINO for unknown classes"""
@@ -218,9 +234,14 @@ class YOLO(LabelStudioMLBase):
 
             # First, try YOLO predictions
             yolo_regions = []
+            model_files_used = []
             for model in control_models:
                 path = model.get_path(task)
                 yolo_regions += model.predict_regions(path)
+                # Track which model file was used
+                model_file = getattr(model, 'model_path', 'unknown')
+                if model_file not in model_files_used:
+                    model_files_used.append(model_file)
 
             # Get labels that YOLO has mappings for (vs labels that need Grounding DINO)
             yolo_mapped_labels = set()
@@ -251,7 +272,13 @@ class YOLO(LabelStudioMLBase):
                 "result": regions,
                 "score": avg_score,
                 "model_version": f"{self.model_version}_hybrid",
+                "model_file": model_files_used[0] if model_files_used else "unknown",
             }
+            if len(model_files_used) > 1:
+                prediction["model_files"] = model_files_used
+            if self.owl_vit_model:
+                prediction["hybrid_mode"] = True
+                prediction["owl_vit_enabled"] = True
             predictions.append(prediction)
 
         return ModelResponse(predictions=predictions)

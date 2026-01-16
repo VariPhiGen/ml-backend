@@ -4,7 +4,7 @@ import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, ClassVar
 try:
-from ultralytics import YOLO
+    from ultralytics import YOLO
 except ImportError:
     try:
         from ultralytics.models.yolo import YOLO
@@ -199,6 +199,46 @@ class ControlModel(BaseModel):
             if os.path.exists(task_path)
             else get_local_path(task_path, task_id=task.get("id"))
         )
+        
+        # Fix: If path has no extension but is a cached file, try to detect and add extension
+        # This is needed because get_local_path() may cache files without extensions,
+        # and YOLO requires files to have proper image extensions
+        if os.path.exists(path) and not os.path.splitext(path)[1]:
+            try:
+                from PIL import Image
+                # Try to detect image type from file content
+                with Image.open(path) as img:
+                    # Get format and convert to lowercase extension
+                    img_format = img.format
+                    if img_format:
+                        ext = img_format.lower()
+                        # Map some formats to standard extensions
+                        format_map = {'JPEG': 'jpg', 'MPO': 'jpg'}
+                        ext = format_map.get(ext.upper(), ext)
+                        new_path = f"{path}.{ext}"
+                        
+                        # Only rename if the new path doesn't exist
+                        if not os.path.exists(new_path):
+                            import shutil
+                            shutil.move(path, new_path)
+                            logger.debug(f"Renamed cached file to add extension: {path} -> {new_path}")
+                        path = new_path
+            except Exception as e:
+                logger.warning(f"Could not detect image format for {path}: {e}. Trying with .jpg extension.")
+                # Fallback: rename to .jpg as last resort (most common image format)
+                try:
+                    import shutil
+                    new_path = f"{path}.jpg"
+                    if not os.path.exists(new_path):
+                        shutil.move(path, new_path)
+                        path = new_path
+                        logger.debug(f"Renamed cached file with .jpg extension: {new_path}")
+                    else:
+                        # If .jpg already exists, use it
+                        path = new_path
+                except Exception as rename_error:
+                    logger.error(f"Failed to rename file {path}: {rename_error}")
+        
         logger.debug(f"load_image: {task_path} => {path}")
         return path
 

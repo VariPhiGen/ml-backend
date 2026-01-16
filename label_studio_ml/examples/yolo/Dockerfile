@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-devel
+FROM pytorch/pytorch:2.2.0-cuda12.1-cudnn8-devel
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TEST_ENV
 ARG USE_HYBRID_MODE
@@ -36,10 +36,10 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
     pip3 install --no-cache-dir -r requirements.txt && \
     python -c "import ultralytics; print('Ultralytics version:', ultralytics.__version__); from ultralytics import YOLO; print('✅ YOLO import successful')"
 
-# Install OWL-ViT for zero-shot detection (reliable alternative to Grounding DINO)
+# Install OWL-ViT for zero-shot detection (compatible with PyTorch 2.2.0)
 RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
         echo "Installing OWL-ViT for zero-shot detection..." && \
-        pip3 install --no-cache-dir transformers timm pillow; \
+        pip3 install --no-cache-dir transformers==4.35.0 timm==0.9.10 pillow; \
     fi
 
 WORKDIR /app

@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   yolo:
     container_name: yolo-ml-backend
@@ -6,48 +8,56 @@ services:
       context: .
       args:
         TEST_ENV: ${TEST_ENV:-false}
-        USE_HYBRID_MODE: ${USE_HYBRID_MODE:-false}
     environment:
-      # Core configuration - EDIT THESE VALUES
-      - LABEL_STUDIO_HOST=${LABEL_STUDIO_HOST:-http://host.docker.internal:8080}
-      - LABEL_STUDIO_API_KEY=${LABEL_STUDIO_API_KEY}
-
-      # Optional authentication
-      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-}
-      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-}
-
+      # Core configuration
+      LABEL_STUDIO_HOST: ${LABEL_STUDIO_HOST:-http://host.docker.internal:8080}
+      LABEL_STUDIO_API_KEY: ${LABEL_STUDIO_API_KEY}
+      
       # Logging and performance
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - WORKERS=${WORKERS:-2}
-      - THREADS=${THREADS:-4}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WORKERS: ${WORKERS:-2}
+      THREADS: ${THREADS:-4}
 
       # YOLO configuration
-      - ALLOW_CUSTOM_MODEL_PATH=${ALLOW_CUSTOM_MODEL_PATH:-true}
-      - DEBUG_PLOT=${DEBUG_PLOT:-false}
-      - MODEL_SCORE_THRESHOLD=${MODEL_SCORE_THRESHOLD:-0.5}
-      - MODEL_ROOT=/app/models
-
-      # Hybrid mode configuration
-      - USE_HYBRID_MODE=${USE_HYBRID_MODE:-false}
-      - OWL_VIT_BOX_THRESHOLD=${OWL_VIT_BOX_THRESHOLD:-0.1}
-      - OWL_VIT_TEXT_THRESHOLD=${OWL_VIT_TEXT_THRESHOLD:-0.0}
+      MODEL_ROOT: /app/models
+      ALLOW_CUSTOM_MODEL_PATH: true
+      DEBUG_PLOT: false
+      MODEL_SCORE_THRESHOLD: 0.5
+      USE_HYBRID_MODE: ${USE_HYBRID_MODE:-false}
+      OWL_VIT_BOX_THRESHOLD: 0.1
+      OWL_VIT_TEXT_THRESHOLD: 0.0
 
       # System paths
-      - MODEL_DIR=/data/models
-      - PYTHONPATH=/app
+      MODEL_DIR: /data/models
+      PYTHONPATH: /app
+
+      # Optional authentication
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}
+      BASIC_AUTH_PASS: ${BASIC_AUTH_PASS:-}
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
     ports:
       - "${PORT:-9090}:9090"
+
     volumes:
       - "./models:/app/models"
       - "./cache_dir:/app/cache_dir"
       - "./data:/data"
+
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:9090/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
     restart: unless-stopped

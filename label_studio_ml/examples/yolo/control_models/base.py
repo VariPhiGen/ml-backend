@@ -3,7 +3,20 @@ import logging
 
 from pydantic import BaseModel
 from typing import Optional, List, Dict, ClassVar
-from ultralytics import YOLO
+try:
+    from ultralytics import YOLO
+except ImportError:
+    try:
+        from ultralytics.models.yolo import YOLO
+    except ImportError:
+        try:
+            from ultralytics.yolo import YOLO
+        except ImportError:
+            # Fallback - try direct import
+            import ultralytics
+            YOLO = getattr(ultralytics, 'YOLO', None)
+            if YOLO is None:
+                raise ImportError("Could not import YOLO from ultralytics. Please check ultralytics installation.")
 
 from label_studio_ml.model import LabelStudioMLBase
 from label_studio_ml.utils import DATA_UNDEFINED_NAME

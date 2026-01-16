@@ -37,6 +37,15 @@ def _health():
     return jsonify({"status": "healthy", "service": "yolo-ml-backend"})
 
 
+@_server.route('/debug/last_response', methods=['GET'])
+@exception_handler
+def _debug_last_response():
+    """Debug endpoint to see the last prediction response"""
+    # This is a simple way to check what was last returned
+    # In production, you'd want to use proper caching/state management
+    return jsonify({"message": "Use browser Network tab to inspect /predict response"})
+
+
 @_server.route('/predict', methods=['POST'])
 @exception_handler
 def _predict():
@@ -84,6 +93,17 @@ def _predict():
             response.update_predictions_version()
 
         response = response.model_dump()
+        # Log the dumped response structure
+        logger.info(f"ModelResponse dumped: type={type(response)}, keys={list(response.keys()) if isinstance(response, dict) else 'N/A'}")
+        if isinstance(response, dict) and response.get('predictions'):
+            logger.info(f"Predictions count: {len(response['predictions'])}")
+            if response['predictions']:
+                first_pred = response['predictions'][0]
+                logger.info(f"First prediction keys: {list(first_pred.keys())}, regions count: {len(first_pred.get('result', []))}")
+                # Log all region labels in the prediction
+                if first_pred.get('result'):
+                    region_labels = [r.get('value', {}).get('rectanglelabels', []) for r in first_pred['result']]
+                    logger.info(f"All region labels in ModelResponse: {region_labels}")
 
     res = response
     if res is None:
@@ -91,6 +111,16 @@ def _predict():
 
     if isinstance(res, dict):
         res = response.get("predictions", response)
+
+    # Log final API response structure
+    logger.info(f"Final API response: type={type(res)}, length={len(res) if isinstance(res, list) else 'N/A'}")
+    if isinstance(res, list) and res:
+        logger.info(f"First result keys: {list(res[0].keys()) if isinstance(res[0], dict) else 'N/A'}")
+        if isinstance(res[0], dict) and res[0].get('result'):
+            logger.info(f"First result has {len(res[0]['result'])} regions")
+            # Log labels from all regions in final response
+            region_labels = [r.get('value', {}).get('rectanglelabels', []) for r in res[0]['result']]
+            logger.info(f"All region labels in final API response: {region_labels}")
 
     return jsonify({'results': res})
 

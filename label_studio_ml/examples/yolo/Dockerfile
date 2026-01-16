@@ -33,14 +33,15 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
-    pip3 install --no-cache-dir --force-reinstall ultralytics==8.2.0 && \
+    pip3 install --no-cache-dir torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu && \
+    pip3 install --no-cache-dir --upgrade ultralytics && \
     pip3 install --no-cache-dir -r requirements.txt && \
     python -c "from ultralytics import YOLO; print('✅ YOLO import successful')"
 
 # Install OWL-ViT for zero-shot detection (reliable alternative to Grounding DINO)
 RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
         echo "Installing OWL-ViT for zero-shot detection..." && \
-        pip3 install --no-cache-dir transformers torch torchvision timm pillow; \
+        pip3 install --no-cache-dir transformers timm pillow; \
     fi
 
 WORKDIR /app
@@ -57,15 +58,10 @@ COPY . ./
 # Create necessary directories
 RUN mkdir -p models cache_dir data
 
-# Download YOLO models automatically
-RUN echo "Downloading YOLO models..." && \
-    yolo predict model=yolov8m.pt source=tests/car.jpg && \
-    yolo predict model=yolov8n.pt source=tests/car.jpg && \
-    yolo predict model=yolov8n-cls.pt source=tests/car.jpg && \
-    yolo predict model=yolov8n-seg.pt source=tests/car.jpg && \
-    yolo predict model=yolov8n-pose.pt source=tests/car.jpg && \
-    yolo predict model=yolov8n-obb.pt source=tests/car.jpg && \
-    mv *.pt models/ 2>/dev/null || true
+# Clear any cached YOLO models to ensure fresh downloads with compatible versions
+RUN rm -f models/*.pt models/*.pth models/*.onnx
+
+# YOLO models will be downloaded on first use to ensure compatibility
 
 # Grounding DINO weights are already downloaded during installation above
 

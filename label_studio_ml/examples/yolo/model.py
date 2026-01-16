@@ -408,7 +408,7 @@ class YOLO(LabelStudioMLBase):
             logger.warning(f"Could not serialize response for logging: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-        print(f"Response: {response}")
+        
         return response
 
     def _predict_owl_vit(self, task: Dict, yolo_mapped_labels: set) -> List[Dict]:

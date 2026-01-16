@@ -37,16 +37,10 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
     pip3 install --no-cache-dir -r requirements.txt && \
     python -c "from ultralytics import YOLO; print('✅ YOLO import successful')"
 
-# Install Grounding DINO if hybrid mode is enabled (following grounding_dino example)
+# Install OWL-ViT for zero-shot detection (reliable alternative to Grounding DINO)
 RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
-        echo "Installing Grounding DINO..." && \
-        cd / && git clone https://github.com/IDEA-Research/GroundingDINO.git && \
-        cd /GroundingDINO && \
-        pip3 install -e . && \
-        mkdir weights && \
-        cd weights && \
-        wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth && \
-        wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth; \
+        echo "Installing OWL-ViT for zero-shot detection..." && \
+        pip3 install --no-cache-dir transformers torch torchvision timm pillow requests; \
     fi
 
 WORKDIR /app

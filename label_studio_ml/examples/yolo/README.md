@@ -92,20 +92,16 @@ The YOLO ML backend supports a hybrid mode that combines YOLO's speed and accura
 
 ### Enabling Hybrid Mode
 
-1. **Install Grounding DINO dependencies**:
+1. **Install OWL-ViT dependencies** (automatically handled during Docker build):
    ```bash
-   pip install git+https://github.com/IDEA-Research/GroundingDINO.git
-   pip install torch torchvision transformers addict yapf timm
+   pip install transformers torch torchvision timm pillow
    ```
 
 2. **Set environment variables**:
    ```bash
    export USE_HYBRID_MODE=true
-   export GROUNDING_DINO_CONFIG=GroundingDINO_SwinT_OGC.py
-   export GROUNDING_DINO_WEIGHTS=groundingdino_swint_ogc.pth
-   export GROUNDING_DINO_BOX_THRESHOLD=0.3
-   export GROUNDING_DINO_TEXT_THRESHOLD=0.25
-   export GROUNDINGDINO_REPO_PATH=./GroundingDINO
+   export OWL_VIT_BOX_THRESHOLD=0.1
+   export OWL_VIT_TEXT_THRESHOLD=0.0
    ```
 
 3. **Configure your labels**:
@@ -153,10 +149,10 @@ Uses **comma-separated labels** for maximum efficiency:
 
 ### Troubleshooting Hybrid Mode
 
-**CUDA Compilation Issues**:
-- The build may fail if CUDA development tools are missing
-- Solution: Ensure Docker has access to NVIDIA GPU and drivers
-- Alternative: Use CPU-only inference (set environment variable to disable CUDA in Grounding DINO)
+**OWL-ViT Installation Issues**:
+- OWL-ViT uses standard Hugging Face transformers (no custom CUDA compilation)
+- If installation fails, check internet connectivity for model downloads
+- Models are downloaded on first use (may take time for initial predictions)
 
 **Large Image Size**:
 - Development image is ~8GB vs ~4GB runtime image

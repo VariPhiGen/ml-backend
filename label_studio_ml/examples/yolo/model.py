@@ -19,20 +19,18 @@ from uuid import uuid4
 from label_studio_sdk._extensions.label_studio_tools.core.utils.io import get_local_path
 
 # Test imports for hybrid mode
-def _check_grounding_dino_available():
-    """Check if Grounding DINO is available for import"""
+def _check_owl_vit_available():
+    """Check if OWL-ViT is available for import"""
     try:
-        import pathlib
         import torch
-        from groundingdino.util.inference import load_model, load_image, predict
-        from groundingdino.util import box_ops
+        from transformers import OwlViTProcessor, OwlViTForObjectDetection
         return True
     except ImportError:
         return False
 
 
 # Initial check
-GROUNDING_DINO_AVAILABLE = _check_grounding_dino_available()
+OWL_VIT_AVAILABLE = _check_owl_vit_available()
 
 
 logger = logging.getLogger(__name__)
@@ -69,32 +67,33 @@ class YOLO(LabelStudioMLBase):
         """Configure any parameters of your model here"""
         self.set("model_version", "yolo")
 
-        # Initialize Grounding DINO if available
-        if _check_grounding_dino_available():
-            self._init_grounding_dino()
+        # Initialize OWL-ViT if available
+        if _check_owl_vit_available():
+            self._init_owl_vit()
         else:
-            logger.warning("Grounding DINO not available - hybrid mode will not work")
-            self.grounding_dino_model = None
+            logger.warning("OWL-ViT not available - hybrid mode will not work")
+            self.owl_vit_model = None
+            self.owl_vit_processor = None
 
-    def _init_grounding_dino(self):
-        """Initialize Grounding DINO model"""
+    def _init_owl_vit(self):
+        """Initialize OWL-ViT model"""
         try:
-            GROUNDING_DINO_CONFIG = os.getenv('GROUNDING_DINO_CONFIG', 'GroundingDINO_SwinT_OGC.py')
-            GROUNDING_DINO_WEIGHTS = os.getenv('GROUNDING_DINO_WEIGHTS', 'groundingdino_swint_ogc.pth')
+            from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
-            self.grounding_dino_model = load_model(
-                pathlib.Path(os.environ.get('GROUNDINGDINO_REPO_PATH', "./GroundingDINO")) / "groundingdino" / "config" / GROUNDING_DINO_CONFIG,
-                pathlib.Path(os.environ.get('GROUNDINGDINO_REPO_PATH', "./GroundingDINO")) / "weights" / GROUNDING_DINO_WEIGHTS
-            )
+            self.owl_vit_processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+            self.owl_vit_model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
-            self.grounding_dino_device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.grounding_dino_box_threshold = float(os.getenv("GROUNDING_DINO_BOX_THRESHOLD", "0.3"))
-            self.grounding_dino_text_threshold = float(os.getenv("GROUNDING_DINO_TEXT_THRESHOLD", "0.25"))
+            self.owl_vit_device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.owl_vit_model.to(self.owl_vit_device)
 
-            logger.info(f"Grounding DINO initialized on device: {self.grounding_dino_device}")
+            self.owl_vit_box_threshold = float(os.getenv("OWL_VIT_BOX_THRESHOLD", "0.1"))
+            self.owl_vit_text_threshold = float(os.getenv("OWL_VIT_TEXT_THRESHOLD", "0.0"))
+
+            logger.info(f"OWL-ViT initialized on device: {self.owl_vit_device}")
         except Exception as e:
-            logger.warning(f"Failed to initialize Grounding DINO: {e}")
-            self.grounding_dino_model = None
+            logger.warning(f"Failed to initialize OWL-ViT: {e}")
+            self.owl_vit_model = None
+            self.owl_vit_processor = None
 
     def detect_control_models(self) -> List[ControlModel]:
         """Detect control models based on the labeling config.
@@ -223,16 +222,16 @@ class YOLO(LabelStudioMLBase):
 
             regions.extend(yolo_regions)
 
-            # Use Grounding DINO for labels that YOLO cannot map (no predicted_values)
-            if yolo_regions:  # Only run Grounding DINO if we have some YOLO results to potentially augment
-                grounding_regions = self._predict_grounding_dino(task, yolo_mapped_labels)
-                regions.extend(grounding_regions)
-                if grounding_regions:
-                    logger.info(f"Added {len(grounding_regions)} Grounding DINO detections to task {task.get('id', 'unknown')}")
+            # Use OWL-ViT for labels that YOLO cannot map (no predicted_values)
+            if yolo_regions:  # Only run OWL-ViT if we have some YOLO results to potentially augment
+                owl_regions = self._predict_owl_vit(task, yolo_mapped_labels)
+                regions.extend(owl_regions)
+                if owl_regions:
+                    logger.info(f"Added {len(owl_regions)} OWL-ViT detections to task {task.get('id', 'unknown')}")
             else:
-                # If no YOLO predictions, we might still want to run Grounding DINO for all labels
-                grounding_regions = self._predict_grounding_dino(task, yolo_mapped_labels)
-                regions.extend(grounding_regions)
+                # If no YOLO predictions, we might still want to run OWL-ViT for all labels
+                owl_regions = self._predict_owl_vit(task, yolo_mapped_labels)
+                regions.extend(owl_regions)
 
             # calculate final score
             all_scores = [region["score"] for region in regions if "score" in region]
@@ -248,9 +247,9 @@ class YOLO(LabelStudioMLBase):
 
         return ModelResponse(predictions=predictions)
 
-    def _predict_grounding_dino(self, task: Dict, yolo_mapped_labels: set) -> List[Dict]:
-        """Use Grounding DINO to predict additional classes not handled by YOLO"""
-        if not self.grounding_dino_model:
+    def _predict_owl_vit(self, task: Dict, yolo_mapped_labels: set) -> List[Dict]:
+        """Use OWL-ViT to predict additional classes not handled by YOLO"""
+        if not self.owl_vit_model or not self.owl_vit_processor:
             return []
 
         regions = []
@@ -258,7 +257,7 @@ class YOLO(LabelStudioMLBase):
         # Get control models to determine which ones support images
         control_models = self.detect_control_models()
 
-        # Find RectangleLabels control for Grounding DINO
+        # Find RectangleLabels control for OWL-ViT
         rectangle_control = None
         for model in control_models:
             if hasattr(model, 'type') and model.type == 'RectangleLabels':
@@ -266,140 +265,99 @@ class YOLO(LabelStudioMLBase):
                 break
 
         if not rectangle_control:
-            logger.warning("No RectangleLabels control found for Grounding DINO predictions")
+            logger.warning("No RectangleLabels control found for OWL-ViT predictions")
             return []
 
-        # Get labels that need Grounding DINO (not handled by YOLO)
+        # Get labels that need OWL-ViT (not handled by YOLO)
         all_labels = set()
         if rectangle_control.label_map:
             all_labels = set(rectangle_control.label_map.values())
 
-        # Labels that need Grounding DINO are those not mapped by YOLO
-        grounding_labels = all_labels - yolo_mapped_labels
+        # Labels that need OWL-ViT are those not mapped by YOLO
+        owl_labels = all_labels - yolo_mapped_labels
 
-        if not grounding_labels:
-            logger.debug("No additional labels to predict with Grounding DINO")
+        if not owl_labels:
+            logger.debug("No additional labels to predict with OWL-ViT")
             return []
 
         try:
             # Get image path
             path = rectangle_control.get_path(task)
 
-            # Load image once
-            src, img = load_image(path)
-            H, W = src.shape[:2]
+            # Load image
+            from PIL import Image
+            image = Image.open(path).convert("RGB")
+            H, W = image.size
 
-            # Always use batch mode: Process all labels in one prompt (faster)
-            regions.extend(self._predict_grounding_dino_batch(img, grounding_labels, rectangle_control, H, W))
+            # Process all labels with OWL-ViT
+            regions.extend(self._predict_owl_vit_batch(image, owl_labels, rectangle_control, H, W))
 
         except Exception as e:
-            logger.error(f"Grounding DINO prediction failed: {e}")
+            logger.error(f"OWL-ViT prediction failed: {e}")
 
         return regions
 
 
-    def _predict_grounding_dino_batch(self, img, grounding_labels, rectangle_control, H, W):
-        """Process all labels in one batch prompt with comma-separated labels"""
+    def _predict_owl_vit_batch(self, image, owl_labels, rectangle_control, H, W):
+        """Process labels with OWL-ViT zero-shot detection"""
         regions = []
 
-        # Create comma-separated prompt from all unmapped labels
-        prompt = ", ".join(grounding_labels)
-        logger.info(f"Grounding DINO batch prediction with prompt: {prompt}")
+        # Convert labels to text queries
+        text_queries = [f"a photo of a {label}" for label in owl_labels]
+        logger.info(f"OWL-ViT prediction with queries: {text_queries}")
 
         try:
-            # Run single Grounding DINO prediction for all labels at once
-            # Grounding DINO predict() returns: boxes, logits, phrases
-            boxes, logits, phrases = predict(
-                model=self.grounding_dino_model,
-                image=img,
-                caption=prompt,  # Comma-separated: "boat, plane, ship, car"
-                box_threshold=self.grounding_dino_box_threshold,
-                text_threshold=self.grounding_dino_text_threshold,
-                device=self.grounding_dino_device
+            import torch
+
+            # Process image and text
+            inputs = self.owl_vit_processor(text=text_queries, images=image, return_tensors="pt")
+            inputs = {k: v.to(self.owl_vit_device) for k, v in inputs.items()}
+
+            # Run inference
+            with torch.no_grad():
+                outputs = self.owl_vit_model(**inputs)
+
+            # Process results
+            target_sizes = torch.tensor([image.size[::-1]])  # (height, width)
+            results = self.owl_vit_processor.post_process_object_detection(
+                outputs=outputs, threshold=self.owl_vit_box_threshold, target_sizes=target_sizes
             )
 
-            logger.debug(f"Grounding DINO found {len(boxes)} detections with phrases: {phrases}")
-
-            if len(boxes) == 0:
-                logger.debug("No detections found for batch prompt")
-                return regions
-
-            boxes_xyxy = box_ops.box_cxcywh_to_xyxy(boxes) * torch.Tensor([W, H, W, H])
-            points = boxes_xyxy.cpu().numpy()
-
-            # Grounding DINO returns phrases for each detection!
-            # phrases is a list of strings, one for each detection
-            logger.info(f"✅ Grounding DINO returned {len(phrases)} phrases: {phrases}")
-
-            # Process each detection with its corresponding phrase
-            for point, logit, phrase in zip(points, logits, phrases):
-                score = float(logit.item())
+            # Process detections
+            for i, (scores, labels, boxes) in enumerate(zip(results[0]["scores"], results[0]["labels"], results[0]["boxes"])):
+                score = float(scores.item())
                 if score < rectangle_control.model_score_threshold:
                     continue
 
-                # Clean the phrase (remove extra spaces, punctuation)
-                clean_phrase = phrase.strip().lower().replace('.', '')
-                logger.debug(f"Processing phrase: '{phrase}' -> cleaned: '{clean_phrase}'")
-
-                # Try to match the phrase to our grounding labels
-                matched_label = None
-                for original_label in grounding_labels:
-                    # Check if the phrase contains the label or vice versa
-                    original_lower = original_label.lower()
-                    if (original_lower in clean_phrase or
-                        clean_phrase in original_lower or
-                        clean_phrase == original_lower):
-                        matched_label = original_label
-                        break
-
-                if matched_label:
-                    output_label = rectangle_control.label_map.get(matched_label, matched_label) if rectangle_control.label_map else matched_label
-                    logger.debug(f"✅ Phrase '{phrase}' matched to label '{matched_label}' -> '{output_label}'")
+                # Get the corresponding label from our queries
+                label_idx = int(labels.item())
+                if label_idx < len(owl_labels):
+                    detected_label = list(owl_labels)[label_idx]
+                    output_label = rectangle_control.label_map.get(detected_label, detected_label)
                 else:
-                    # Fallback to generic label if no match found
-                    output_label = rectangle_control.label_map.get("detected_object", "Detected Object") if rectangle_control.label_map else "Detected Object"
-                    logger.debug(f"⚠️ Phrase '{phrase}' not matched to any label, using generic '{output_label}'")
+                    output_label = rectangle_control.label_map.get("detected_object", "Detected Object")
 
+                # Convert boxes from (x1, y1, x2, y2) to percentage coordinates
+                box = boxes.cpu().numpy()
                 region = {
                     "from_name": rectangle_control.from_name,
                     "to_name": rectangle_control.to_name,
                     "type": "rectanglelabels",
                     "value": {
                         "rectanglelabels": [output_label],
-                        "x": (point[0] / W) * 100,
-                        "y": (point[1] / H) * 100,
-                        "width": ((point[2] - point[0]) / W) * 100,
-                        "height": ((point[3] - point[1]) / H) * 100,
+                        "x": (box[0] / W) * 100,
+                        "y": (box[1] / H) * 100,
+                        "width": ((box[2] - box[0]) / W) * 100,
+                        "height": ((box[3] - box[1]) / H) * 100,
                     },
                     "score": score,
                 }
                 regions.append(region)
 
-            # Convert all detections to Label Studio format with generic label
-            for point, logit in zip(points, logits):
-                score = float(logit.item())
-                if score < rectangle_control.model_score_threshold:
-                    continue
-
-                region = {
-                    "from_name": rectangle_control.from_name,
-                    "to_name": rectangle_control.to_name,
-                    "type": "rectanglelabels",
-                    "value": {
-                        "rectanglelabels": [output_label],
-                        "x": (point[0] / W) * 100,
-                        "y": (point[1] / H) * 100,
-                        "width": ((point[2] - point[0]) / W) * 100,
-                        "height": ((point[3] - point[1]) / H) * 100,
-                    },
-                    "score": score,
-                }
-                regions.append(region)
-
-            logger.info(f"Grounding DINO found {len(regions)} detections for {len(grounding_labels)} labels")
+            logger.info(f"OWL-ViT found {len(regions)} detections")
 
         except Exception as e:
-            logger.error(f"Grounding DINO batch prediction failed: {e}")
+            logger.error(f"OWL-ViT prediction error: {e}")
 
         return regions
 

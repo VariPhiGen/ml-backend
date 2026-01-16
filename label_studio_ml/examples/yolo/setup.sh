@@ -127,8 +127,8 @@ download_models() {
 
     # Download Grounding DINO model if hybrid mode is enabled
     if [ "$USE_HYBRID" = "true" ]; then
-        print_warning "Hybrid mode enabled - Grounding DINO will be installed during Docker build"
-        print_info "Grounding DINO will be downloaded and installed automatically during build"
+        print_warning "Hybrid mode enabled - OWL-ViT will be installed during Docker build"
+        print_info "OWL-ViT (zero-shot detection) will be downloaded and installed automatically during build"
     fi
 }
 

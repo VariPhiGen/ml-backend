@@ -33,10 +33,9 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
-    pip3 install --no-cache-dir torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu && \
-    pip3 install --no-cache-dir --upgrade ultralytics && \
+    pip3 install --no-cache-dir --upgrade --force-reinstall ultralytics && \
     pip3 install --no-cache-dir -r requirements.txt && \
-    python -c "from ultralytics import YOLO; print('✅ YOLO import successful')"
+    python -c "import ultralytics; print('Ultralytics version:', ultralytics.__version__); from ultralytics import YOLO; print('✅ YOLO import successful')"
 
 # Install OWL-ViT for zero-shot detection (reliable alternative to Grounding DINO)
 RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \

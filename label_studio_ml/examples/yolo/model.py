@@ -30,51 +30,6 @@ def _check_grounding_dino_available():
     except ImportError:
         return False
 
-def _install_grounding_dino_runtime():
-    """Install Grounding DINO at runtime with multiple fallback strategies"""
-    import subprocess
-    import sys
-    import os
-
-    logger.info("Installing Grounding DINO at runtime...")
-
-    try:
-        # Strategy 1: Try pip install from PyPI
-        logger.info("Trying pip install groundingdino-py...")
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "groundingdino-py", "--no-build-isolation"
-        ], timeout=300)
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        logger.warning("PyPI installation failed, trying git installation...")
-
-    try:
-        # Strategy 2: Git clone and CPU-only install
-        logger.info("Installing from GitHub (CPU-only)...")
-        env = os.environ.copy()
-        env['FORCE_CUDA'] = '0'
-
-        # Clone repository
-        subprocess.check_call([
-            "git", "clone", "https://github.com/IDEA-Research/GroundingDINO.git", "/tmp/GroundingDINO"
-        ], env=env)
-
-        # Install in editable mode
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-e", "/tmp/GroundingDINO", "--no-build-isolation"
-        ], env=env, timeout=600)
-
-        # Download weights
-        os.makedirs("/app/models", exist_ok=True)
-        subprocess.check_call([
-            "wget", "-q", "-O", "/app/models/groundingdino_swint_ogc.pth",
-            "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"
-        ])
-
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
-        logger.error(f"Git installation failed: {e}")
-        return False
 
 # Initial check
 GROUNDING_DINO_AVAILABLE = _check_grounding_dino_available()
@@ -114,27 +69,11 @@ class YOLO(LabelStudioMLBase):
         """Configure any parameters of your model here"""
         self.set("model_version", "yolo")
 
-        # Initialize Grounding DINO if available, or try runtime installation
+        # Initialize Grounding DINO if available
         if _check_grounding_dino_available():
             self._init_grounding_dino()
-        elif os.getenv("USE_HYBRID_MODE", "false").lower() in ["1", "true"]:
-            # Try runtime installation for hybrid mode
-            logger.info("Grounding DINO not available, attempting runtime installation...")
-            if _install_grounding_dino_runtime():
-                # Re-import and initialize
-                try:
-                    if _check_grounding_dino_available():
-                        self._init_grounding_dino()
-                    else:
-                        logger.error("Grounding DINO installation succeeded but import failed")
-                        self.grounding_dino_model = None
-                except Exception as e:
-                    logger.error(f"Failed to initialize Grounding DINO after installation: {e}")
-                    self.grounding_dino_model = None
-            else:
-                logger.warning("Grounding DINO runtime installation failed - hybrid mode will not work")
-                self.grounding_dino_model = None
         else:
+            logger.warning("Grounding DINO not available - hybrid mode will not work")
             self.grounding_dino_model = None
 
     def _init_grounding_dino(self):

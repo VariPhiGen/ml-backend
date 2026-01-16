@@ -29,16 +29,27 @@ ENV TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6+PTX;8.9;9.0"
 # Install Python dependencies
 COPY requirements-base.txt .
 RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
-    pip install --no-cache-dir -r requirements-base.txt
+    pip3 install --no-cache-dir -r requirements-base.txt
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
-    pip install --no-cache-dir --force-reinstall ultralytics==8.2.0 && \
-    pip install --no-cache-dir -r requirements.txt && \
+    pip3 install --no-cache-dir --force-reinstall ultralytics==8.2.0 && \
+    pip3 install --no-cache-dir -r requirements.txt && \
     python -c "from ultralytics import YOLO; print('✅ YOLO import successful')"
 
-# Note: Grounding DINO will be installed at runtime if USE_HYBRID_MODE=true
-# This avoids build-time CUDA compilation issues
+# Install Grounding DINO if hybrid mode is enabled (following grounding_dino example)
+RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
+        echo "Installing Grounding DINO..." && \
+        cd / && git clone https://github.com/IDEA-Research/GroundingDINO.git && \
+        cd /GroundingDINO && \
+        pip3 install -e . && \
+        mkdir weights && \
+        cd weights && \
+        wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth && \
+        wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha2/groundingdino_swinb_cogcoor.pth; \
+    fi
+
+WORKDIR /app
 
 # Install test requirements if needed
 COPY requirements-test.txt .
@@ -62,12 +73,7 @@ RUN echo "Downloading YOLO models..." && \
     yolo predict model=yolov8n-obb.pt source=tests/car.jpg && \
     mv *.pt models/ 2>/dev/null || true
 
-# Download Grounding DINO model if hybrid mode is enabled
-RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
-        echo "Downloading Grounding DINO model..." && \
-        wget -O models/groundingdino_swint_ogc.pth \
-            https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth; \
-    fi
+# Grounding DINO weights are already downloaded during installation above
 
 # Health check endpoint
 RUN echo '#!/bin/bash\necho "OK"' > /app/health.sh && chmod +x /app/health.sh

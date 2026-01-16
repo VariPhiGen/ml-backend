@@ -128,16 +128,7 @@ download_models() {
     # Download Grounding DINO model if hybrid mode is enabled
     if [ "$USE_HYBRID" = "true" ]; then
         print_warning "Hybrid mode enabled - Grounding DINO will be installed during Docker build"
-        print_info "Grounding DINO model will be downloaded during build..."
-
-        if [ ! -f "models/groundingdino_swint_ogc.pth" ]; then
-            print_info "Downloading Grounding DINO weights..."
-            wget -O models/groundingdino_swint_ogc.pth \
-                https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
-            print_success "Grounding DINO weights downloaded"
-        else
-            print_info "Grounding DINO weights already exist"
-        fi
+        print_info "Grounding DINO will be downloaded and installed automatically during build"
     fi
 }
 

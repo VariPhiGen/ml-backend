@@ -32,6 +32,14 @@ def _check_owl_vit_available():
 # Initial check
 OWL_VIT_AVAILABLE = _check_owl_vit_available()
 
+# Module-level cache for OWL-ViT model (shared across all instances)
+_owl_vit_cache = {
+    'model': None,
+    'processor': None,
+    'device': None,
+    'box_threshold': None,
+    'text_threshold': None,
+}
 
 logger = logging.getLogger(__name__)
 if not os.getenv("LOG_LEVEL"):
@@ -74,7 +82,17 @@ class YOLO(LabelStudioMLBase):
             self.owl_vit_processor = None
 
     def _init_owl_vit(self):
-        """Initialize OWL-ViT model"""
+        """Initialize OWL-ViT model (uses module-level cache to avoid reloading)"""
+        # Check module-level cache first to avoid reloading on every request
+        if _owl_vit_cache['model'] is not None:
+            logger.info("Reusing cached OWL-ViT model (already loaded in this worker)")
+            self.owl_vit_model = _owl_vit_cache['model']
+            self.owl_vit_processor = _owl_vit_cache['processor']
+            self.owl_vit_device = _owl_vit_cache['device']
+            self.owl_vit_box_threshold = _owl_vit_cache['box_threshold']
+            self.owl_vit_text_threshold = _owl_vit_cache['text_threshold']
+            return
+        
         try:
             import torch
             from transformers import OwlViTProcessor, OwlViTForObjectDetection
@@ -82,22 +100,36 @@ class YOLO(LabelStudioMLBase):
             logger.info("Loading OWL-ViT model (this may take a moment on first run)...")
 
             # Load with local cache and error handling
-            self.owl_vit_processor = OwlViTProcessor.from_pretrained(
+            processor = OwlViTProcessor.from_pretrained(
                 "google/owlvit-base-patch32",
                 cache_dir=os.getenv("TRANSFORMERS_CACHE", "/tmp/transformers_cache")
             )
-            self.owl_vit_model = OwlViTForObjectDetection.from_pretrained(
+            model = OwlViTForObjectDetection.from_pretrained(
                 "google/owlvit-base-patch32",
                 cache_dir=os.getenv("TRANSFORMERS_CACHE", "/tmp/transformers_cache")
             )
 
-            self.owl_vit_device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.owl_vit_model.to(self.owl_vit_device)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model.to(device)
 
-            self.owl_vit_box_threshold = float(os.getenv("OWL_VIT_BOX_THRESHOLD", "0.1"))
-            self.owl_vit_text_threshold = float(os.getenv("OWL_VIT_TEXT_THRESHOLD", "0.0"))
+            box_threshold = float(os.getenv("OWL_VIT_BOX_THRESHOLD", "0.1"))
+            text_threshold = float(os.getenv("OWL_VIT_TEXT_THRESHOLD", "0.0"))
 
-            logger.info(f"✅ OWL-ViT initialized successfully on device: {self.owl_vit_device}")
+            # Store in module-level cache
+            _owl_vit_cache['model'] = model
+            _owl_vit_cache['processor'] = processor
+            _owl_vit_cache['device'] = device
+            _owl_vit_cache['box_threshold'] = box_threshold
+            _owl_vit_cache['text_threshold'] = text_threshold
+
+            # Also set on instance
+            self.owl_vit_model = model
+            self.owl_vit_processor = processor
+            self.owl_vit_device = device
+            self.owl_vit_box_threshold = box_threshold
+            self.owl_vit_text_threshold = text_threshold
+
+            logger.info(f"✅ OWL-ViT initialized successfully on device: {device}")
         except Exception as e:
             logger.error(f"❌ Failed to initialize OWL-ViT: {e}")
             logger.error("This might be due to network issues or missing dependencies")

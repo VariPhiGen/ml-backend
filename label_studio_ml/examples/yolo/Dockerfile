@@ -37,16 +37,8 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
     pip install --no-cache-dir -r requirements.txt && \
     python -c "from ultralytics import YOLO; print('✅ YOLO import successful')"
 
-# Install Grounding DINO if hybrid mode is enabled
-RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
-        echo "Installing Grounding DINO..." && \
-        cd / && git clone https://github.com/IDEA-Research/GroundingDINO.git && \
-        cd /GroundingDINO && \
-        pip install -e . && \
-        mkdir -p weights && \
-        cd weights && \
-        wget -q https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth; \
-    fi
+# Note: Grounding DINO will be installed at runtime if USE_HYBRID_MODE=true
+# This avoids build-time CUDA compilation issues
 
 # Install test requirements if needed
 COPY requirements-test.txt .

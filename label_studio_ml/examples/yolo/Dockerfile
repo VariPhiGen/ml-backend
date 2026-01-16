@@ -40,7 +40,7 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
 # Install OWL-ViT for zero-shot detection (reliable alternative to Grounding DINO)
 RUN if [ "$USE_HYBRID_MODE" = "true" ]; then \
         echo "Installing OWL-ViT for zero-shot detection..." && \
-        pip3 install --no-cache-dir transformers torch torchvision timm pillow requests; \
+        pip3 install --no-cache-dir transformers torch torchvision timm pillow; \
     fi
 
 WORKDIR /app

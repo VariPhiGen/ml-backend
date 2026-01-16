@@ -37,16 +37,7 @@ logger = logging.getLogger(__name__)
 if not os.getenv("LOG_LEVEL"):
     logger.setLevel(logging.INFO)
 
-# Test imports for hybrid mode
-try:
-    # These imports are only needed when hybrid mode is enabled
-    import pathlib
-    import torch
-    from groundingdino.util.inference import load_model, load_image, predict
-    from groundingdino.util import box_ops
-    GROUNDING_DINO_AVAILABLE = True
-except ImportError:
-    GROUNDING_DINO_AVAILABLE = False
+# OWL-ViT availability is checked by _check_owl_vit_available() function
 
 # Register available model classes
 available_model_classes = [
@@ -67,11 +58,18 @@ class YOLO(LabelStudioMLBase):
         """Configure any parameters of your model here"""
         self.set("model_version", "yolo")
 
-        # Initialize OWL-ViT if available
-        if _check_owl_vit_available():
-            self._init_owl_vit()
-        else:
-            logger.warning("OWL-ViT not available - hybrid mode will not work")
+        # Initialize OWL-ViT if available (for hybrid mode)
+        # This happens during container startup, so be defensive
+        try:
+            if _check_owl_vit_available():
+                self._init_owl_vit()
+            else:
+                logger.warning("OWL-ViT dependencies not available - hybrid mode disabled")
+                self.owl_vit_model = None
+                self.owl_vit_processor = None
+        except Exception as e:
+            logger.error(f"Failed to initialize OWL-ViT during startup: {e}")
+            logger.warning("Continuing without hybrid mode - YOLO-only predictions available")
             self.owl_vit_model = None
             self.owl_vit_processor = None
 
@@ -80,8 +78,17 @@ class YOLO(LabelStudioMLBase):
         try:
             from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
-            self.owl_vit_processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
-            self.owl_vit_model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+            logger.info("Loading OWL-ViT model (this may take a moment on first run)...")
+
+            # Load with local cache and error handling
+            self.owl_vit_processor = OwlViTProcessor.from_pretrained(
+                "google/owlvit-base-patch32",
+                cache_dir=os.getenv("TRANSFORMERS_CACHE", "/tmp/transformers_cache")
+            )
+            self.owl_vit_model = OwlViTForObjectDetection.from_pretrained(
+                "google/owlvit-base-patch32",
+                cache_dir=os.getenv("TRANSFORMERS_CACHE", "/tmp/transformers_cache")
+            )
 
             self.owl_vit_device = "cuda" if torch.cuda.is_available() else "cpu"
             self.owl_vit_model.to(self.owl_vit_device)
@@ -89,9 +96,11 @@ class YOLO(LabelStudioMLBase):
             self.owl_vit_box_threshold = float(os.getenv("OWL_VIT_BOX_THRESHOLD", "0.1"))
             self.owl_vit_text_threshold = float(os.getenv("OWL_VIT_TEXT_THRESHOLD", "0.0"))
 
-            logger.info(f"OWL-ViT initialized on device: {self.owl_vit_device}")
+            logger.info(f"✅ OWL-ViT initialized successfully on device: {self.owl_vit_device}")
         except Exception as e:
-            logger.warning(f"Failed to initialize OWL-ViT: {e}")
+            logger.error(f"❌ Failed to initialize OWL-ViT: {e}")
+            logger.error("This might be due to network issues or missing dependencies")
+            logger.error("Hybrid mode will not work without OWL-ViT")
             self.owl_vit_model = None
             self.owl_vit_processor = None
 

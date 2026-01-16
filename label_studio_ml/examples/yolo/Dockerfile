@@ -33,7 +33,7 @@ RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
 
 COPY requirements.txt .
 RUN --mount=type=cache,target=${PIP_CACHE_DIR},sharing=locked \
-    pip3 install --no-cache-dir --upgrade --force-reinstall ultralytics && \
+    pip3 install --no-cache-dir --force-reinstall ultralytics --no-deps && \
     pip3 install --no-cache-dir -r requirements.txt && \
     python -c "import ultralytics; print('Ultralytics version:', ultralytics.__version__); from ultralytics import YOLO; print('✅ YOLO import successful')"
 

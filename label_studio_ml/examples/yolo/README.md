@@ -174,7 +174,7 @@ The easiest way to deploy is using our automated setup script:
 
 ### Option 1: Automated Interactive Setup
 
-```bash
+    ```bash
 # Clone the repository (if not already done)
 cd /path/to/your/workspace
 git clone https://github.com/HumanSignal/label-studio-ml-backend.git
@@ -228,7 +228,7 @@ If you prefer manual configuration:
 
 ```bash
 ./setup.sh --quick
-```
+    ```
 
 3. Open Label Studio and create a new project with the following labeling config:
 

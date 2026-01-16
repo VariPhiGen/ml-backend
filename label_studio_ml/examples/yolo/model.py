@@ -176,7 +176,7 @@ class YOLO(LabelStudioMLBase):
         # Check if hybrid mode is enabled
         use_hybrid = os.getenv("USE_HYBRID_MODE", "false").lower() in ["1", "true"]
 
-        if use_hybrid and self.grounding_dino_model:
+        if use_hybrid and self.owl_vit_model:
             return self._predict_hybrid(tasks, context, **kwargs)
         else:
             return self._predict_yolo_only(tasks, context, **kwargs)

@@ -4,7 +4,7 @@ import logging
 from pydantic import BaseModel
 from typing import Optional, List, Dict, ClassVar
 try:
-    from ultralytics import YOLO
+from ultralytics import YOLO
 except ImportError:
     try:
         from ultralytics.models.yolo import YOLO
